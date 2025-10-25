@@ -1,0 +1,45 @@
+# Ignore node modules
+/backend/node_modules/
+/frontend/node_modules/
+node_modules/
+
+# Ignore build output
+/backend/dist/
+/frontend/build/
+
+# Ignore logs
+/backend/logs/
+/frontend/logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore environment files (sangat penting untuk public repo)
+/backend/.env
+/frontend/.env
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Ignore IDE files
+.vscode/
+.idea/
+
+# Ignore database files or dumps (jika ada)
+*.sql
+*.db
+/backend/prisma/migrations/  # Jika ingin ignore migrations, tapi biasanya ok untuk push schema saja
+
+# Ignore sensitive scripts or files
+/backend/src/scripts/createAdmin.ts  # Jika ingin ignore script dengan password default
+
+# Ignore temporary files
+*.tmp
+*.swp

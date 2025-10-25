@@ -1,0 +1,153 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+// backend/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  nama      String
+  username  String   @unique
+  password  String
+  role      UserRole @default(VIEWER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  shipments Shipment[]
+
+  // add this relation back-reference for notifications
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Company {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  address       String?
+  phone         String?
+  fax           String?    // added
+  email         String?
+  contactPerson String?
+  country       String?    // added
+  section       String?    // added
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  orderedShipments   Shipment[] @relation("OrderedBy")
+  deliveredShipments Shipment[] @relation("DeliveredTo")
+  
+  @@map("companies")
+}
+
+model Shipment {
+  id              String         @id @default(cuid())
+  shippingMark    String
+  orderNo         String
+  caseNo          String
+  destination     String
+  model           String
+  productionMonth DateTime
+  caseSize        String
+  grossWeight     Float
+  netWeight       Float
+  // make rackNo a TEXT column to accept long concatenated rack lists
+  rackNo          String?        @db.Text
+  status          ShipmentStatus @default(DRAFT)
+  
+  // PDF Commercial Data
+  memoNo          String?
+  goodsType       String?        // ADDED: jenis barang (memo)
+  shipmentType    String?
+  dangerLevel     String?
+  specialPermit   Boolean?
+  invoiceType     String?
+  purpose         String?
+  sapInfo         String?
+  tpNo            String?
+  tpDate          DateTime?
+  packingDetails  String?        // ADDED: packing details dari memo
+  memoGoodsInfo   String?        // ADDED: detail barang memo (text)
+  portOfDischarge String?
+  shipmentMethod  String?
+  paymentMethod   String?
+  exportType      String?
+  etdShipment     DateTime?
+  
+  // Relationships
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  orderById   String?
+  orderBy     Company? @relation("OrderedBy", fields: [orderById], references: [id])
+  
+  deliverToId String?
+  deliverTo   Company? @relation("DeliveredTo", fields: [deliverToId], references: [id])
+  
+  items       ShipmentItem[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("shipments")
+}
+
+model ShipmentItem {
+  id         String   @id @default(cuid())
+  no         Int
+  boxNo      String
+  partNo     String
+  partName   String
+  quantity   Int
+  remark     String?
+  
+  // PDF Commercial Data
+  pricePerPcs Float?
+  totalAmount Float?
+  specialPacking String?   // CHANGED: allow string values like "NO"/"YES"
+  
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("shipment_items")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  isRead    Boolean  @default(false)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notifications")
+}
+
+enum UserRole {
+  ADMIN
+  VIEWER
+}
+
+enum ShipmentStatus {
+  DRAFT
+  IN_PROCESS
+  APPROVED
+}

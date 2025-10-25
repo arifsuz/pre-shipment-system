@@ -1,0 +1,101 @@
+@import 'tailwindcss';
+/* Custom design tokens + helper utility classes */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens */
+:root {
+  --brand-50: #ecfeff;
+  --brand-100: #ccfbf1;
+  --brand-300: #67f6e6;
+  --brand-500: #0ea5a4; /* primary */
+  --brand-600: #059669;
+  --brand-700: #047857;
+
+  --danger-500: #ef4444;
+  --danger-600: #dc2626;
+
+  --success-600: #16a34a;
+  --success-700: #15803d;
+
+  --muted-500: #6b7280;
+  --card-border: rgba(15,23,42,0.04);
+}
+
+/* Page base */
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-gradient-to-b from-slate-50 via-white to-slate-100;
+  color: theme('colors.gray.900');
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* Reusable card */
+.card, .auth-card {
+  @apply bg-white rounded-2xl p-6;
+  box-shadow: 0 6px 18px rgba(12, 15, 22, 0.06);
+  border: 1px solid var(--card-border);
+}
+
+/* Auth specifics */
+.auth-card {
+  @apply max-w-md w-full;
+  padding: 2rem;
+}
+
+/* Form section spacing */
+.form-group {
+  @apply space-y-4;
+}
+
+/* Brand logo */
+.brand-logo {
+  @apply h-12 w-12 rounded-lg flex items-center justify-center text-white font-bold;
+  background-color: var(--brand-500);
+}
+
+/* Small helpers */
+.input-muted {
+  @apply text-sm text-slate-500;
+}
+
+/* Primary / semantic utilities (used across components) */
+.bg-primary-600 { background-color: var(--brand-600) !important; }
+.bg-primary-100 { background-color: var(--brand-100) !important; }
+.text-primary-600 { color: var(--brand-600) !important; }
+.text-primary-700 { color: var(--brand-700) !important; }
+.border-primary-500 { border-color: var(--brand-500) !important; }
+
+/* Danger / success */
+.bg-danger-500 { background-color: var(--danger-500) !important; }
+.text-danger-600 { color: var(--danger-600) !important; }
+.bg-success-600 { background-color: var(--success-600) !important; }
+.text-success-700 { color: var(--success-700) !important; }
+
+/* Focus helpers for classes that use Tailwind-like naming in code */
+.focus\:ring-primary-500:focus {
+  box-shadow: 0 0 0 4px rgba(14,165,164,0.12);
+}
+.focus\:border-primary-500:focus {
+  border-color: var(--brand-600) !important;
+}
+
+/* Small UI niceties */
+.shadow-subtle { box-shadow: 0 4px 12px rgba(12,15,22,0.06); }
+.rounded-md { border-radius: 0.5rem; }
+
+/* Layout helpers */
+.container-main {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
