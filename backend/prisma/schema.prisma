@@ -98,11 +98,45 @@ model Shipment {
   deliverTo   Company? @relation("DeliveredTo", fields: [deliverToId], references: [id])
   
   items       ShipmentItem[]
-  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
+  Memo        Memo?    @relation("ShipmentMemo")
+
   @@map("shipments")
+}
+
+// new: separate memo records so shipment.items are never overwritten by memo input
+model Memo {
+  id            String   @id @default(cuid())
+  shipmentId    String   @unique
+  shipment      Shipment @relation("ShipmentMemo", fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  memoNo        String?
+  goodsType     String?
+  shipmentType  String?
+  dangerLevel   String?
+  specialPermit Boolean?
+  invoiceType   String?
+  purpose       String?
+  sapInfo       String?
+  tpNo          String?
+  tpDate        DateTime?
+  packingDetails String?
+  memoGoodsInfo String?    // textual fallback / human readable
+  manualItems   Json?      // structured memo items (optional)
+  portOfDischarge String?
+  shipmentMethod  String?
+  paymentMethod   String?
+  exportType      String?
+  etdShipment     DateTime?
+
+  status        String?   // DRAFT / PUBLISHED (optional)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("memos")
 }
 
 model ShipmentItem {

@@ -165,7 +165,17 @@ export class ShipmentController {
       const { id } = req.params;
       const memoData = memoUpdateSchema.parse(req.body);
 
-      const result = await shipmentService.updateShipment(id, memoData);
+      // Prevent manualItems from replacing shipment.items in DB.
+      // Keep memo-related scalars and, if frontend sent manualItems and there's
+      // no memoGoodsInfo text, persist a JSON snapshot into memoGoodsInfo (non-destructive).
+      const { manualItems, ...memoOnly } = memoData as any;
+
+      if (Array.isArray(manualItems) && manualItems.length && !memoOnly.memoGoodsInfo) {
+        // store as fallback text so memo content is not lost (optional)
+        memoOnly.memoGoodsInfo = JSON.stringify(manualItems);
+      }
+
+      const result = await shipmentService.updateShipment(id, memoOnly);
 
       if (!result.success) {
         return res.status(400).json(result);
@@ -189,6 +199,60 @@ export class ShipmentController {
     } catch (error) {
       console.error('ShipmentController.getMemos error:', error);
       return res.status(500).json({ success: false, message: 'Error loading memos' });
+    }
+  }
+
+  // GET /shipments/:id/memo - get memo (draft or published) for shipment
+  async getMemo(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const result = await shipmentService.getMemoByShipmentId(id);
+      if (!result.success) return res.status(404).json(result);
+      return res.json({ success: true, data: result.data });
+    } catch (error) {
+      console.error('ShipmentController.getMemo error:', error);
+      return res.status(500).json({ success: false, message: 'Error loading memo' });
+    }
+  }
+
+  // PUT /shipments/:id/memo - upsert draft memo (autosave / Save Draft In-Process)
+  async upsertMemo(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const payload = req.body;
+      const result = await shipmentService.upsertMemoDraft(id, payload);
+      if (!result.success) return res.status(400).json(result);
+      return res.json({ success: true, data: result.data });
+    } catch (error) {
+      console.error('ShipmentController.upsertMemo error:', error);
+      return res.status(500).json({ success: false, message: 'Error saving memo draft' });
+    }
+  }
+
+  // DELETE /shipments/:id/memo - delete draft (Cancel)
+  async deleteMemo(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const result = await shipmentService.deleteMemoDraft(id);
+      if (!result.success) return res.status(400).json(result);
+      return res.json({ success: true });
+    } catch (error) {
+      console.error('ShipmentController.deleteMemo error:', error);
+      return res.status(500).json({ success: false, message: 'Error deleting memo draft' });
+    }
+  }
+
+  // POST /shipments/:id/memo/publish - publish memo (and optionally update shipment status)
+  async publishMemo(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const payload = req.body;
+      const result = await shipmentService.publishMemo(id, payload);
+      if (!result.success) return res.status(400).json(result);
+      return res.json({ success: true, data: result.data });
+    } catch (error) {
+      console.error('ShipmentController.publishMemo error:', error);
+      return res.status(500).json({ success: false, message: 'Error publishing memo' });
     }
   }
 }

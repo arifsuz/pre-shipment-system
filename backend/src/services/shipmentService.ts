@@ -368,6 +368,85 @@ export class ShipmentService {
       return { success: false, message: 'Error loading memos' };
     }
   }
+
+  // Memo helpers (store memo separately so shipment.items remain unchanged)
+  async getMemoByShipmentId(shipmentId: string) {
+    try {
+      const memo = await prisma.memo.findUnique({ where: { shipmentId } });
+      return { success: true, data: memo };
+    } catch (error) {
+      console.error('getMemoByShipmentId error', error);
+      return { success: false, message: 'Error loading memo' };
+    }
+  }
+
+  async upsertMemoDraft(shipmentId: string, payload: any) {
+    try {
+      const data: any = {
+        shipmentId,
+        memoNo: payload.memoNo ?? null,
+        goodsType: payload.goodsType ?? null,
+        shipmentType: payload.shipmentType ?? null,
+        dangerLevel: payload.dangerLevel ?? null,
+        specialPermit: payload.specialPermit ?? false,
+        invoiceType: payload.invoiceType ?? null,
+        purpose: payload.purpose ?? null,
+        sapInfo: payload.sapInfo ?? null,
+        tpNo: payload.tpNo ?? null,
+        tpDate: payload.tpDate ?? null,
+        packingDetails: payload.packingDetails ?? null,
+        memoGoodsInfo: payload.memoGoodsInfo ?? null,
+        manualItems: payload.manualItems ?? null,
+        portOfDischarge: payload.portOfDischarge ?? null,
+        shipmentMethod: payload.shipmentMethod ?? null,
+        paymentMethod: payload.paymentMethod ?? null,
+        exportType: payload.exportType ?? null,
+        etdShipment: payload.etdShipment ?? null,
+        status: 'DRAFT'
+      };
+
+      const memo = await prisma.memo.upsert({
+        where: { shipmentId },
+        update: data,
+        create: data
+      });
+      return { success: true, data: memo };
+    } catch (error) {
+      console.error('upsertMemoDraft error', error);
+      return { success: false, message: 'Error saving memo draft' };
+    }
+  }
+
+  async deleteMemoDraft(shipmentId: string) {
+    try {
+      await prisma.memo.deleteMany({ where: { shipmentId } });
+      return { success: true };
+    } catch (error) {
+      console.error('deleteMemoDraft error', error);
+      return { success: false, message: 'Error deleting memo draft' };
+    }
+  }
+
+  // publish: mark memo as published and (optionally) update shipment status
+  async publishMemo(shipmentId: string, publishPayload: any) {
+    try {
+      const memo = await prisma.memo.update({
+        where: { shipmentId },
+        data: { ...publishPayload, status: 'PUBLISHED' }
+      });
+      // optionally update shipment.status if desired:
+      if (publishPayload.setShipmentStatus) {
+        await prisma.shipment.update({
+          where: { id: shipmentId },
+          data: { status: publishPayload.setShipmentStatus }
+        });
+      }
+      return { success: true, data: memo };
+    } catch (error) {
+      console.error('publishMemo error', error);
+      return { success: false, message: 'Error publishing memo' };
+    }
+  }
 }
 
 export const shipmentService = new ShipmentService();

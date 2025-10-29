@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import type { CreateShipmentData, Shipment } from '../../types';
+import { companyService } from '../../services/companyService';
+import type { Company } from '../../types';
 
 type ManualItem = {
   no: number;
@@ -14,6 +16,7 @@ type ManualItem = {
 };
 
 type Party = {
+  id?: string; // added
   companyName?: string;
   address?: string;
   country?: string;
@@ -88,10 +91,31 @@ export const MemoModal: React.FC<Props> = ({ open, onClose, shipmentItems = [], 
 
   const [checked, setChecked] = useState(false);
   const [lastDiff, setLastDiff] = useState<{ key: string; shipmentQty: number; memoQty: number }[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]); // added
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const list = await companyService.getAll();
+        if (mounted) setCompanies(list);
+      } catch (err) {
+        console.error('Failed load companies', err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const updateField = (k: keyof MemoData, v: any) => setMemo(prev => ({ ...prev, [k]: v }));
   const updatePartyField = (party: 'orderBy' | 'deliveryTo', field: keyof Party, v: any) =>
-    setMemo(prev => ({ ...prev, [party]: { ...(prev[party] || {}), [field]: v } }));
+    setMemo(prev => {
+      const next = { ...prev, [party]: { ...(prev[party] || {}), [field]: v } };
+      // clear id if user edits after selecting existing company
+      if ((prev[party] as any)?.id && field !== 'id') {
+        delete (next[party] as any).id;
+      }
+      return next as MemoData;
+    });
 
   const addManualItem = () => {
     setMemo(prev => ({
@@ -173,6 +197,26 @@ export const MemoModal: React.FC<Props> = ({ open, onClose, shipmentItems = [], 
     await onSaveMemo(payload as any);
   };
 
+  const onSelectCompany = (party: 'orderBy' | 'deliveryTo', companyId: string) => {
+    if (!companyId || companyId === '__manual__') {
+      setMemo(prev => ({ ...prev, [party]: {} }));
+      return;
+    }
+    const c = companies.find(x => x.id === companyId);
+    if (!c) return;
+    setMemo(prev => ({ ...prev, [party]: {
+      id: c.id,
+      companyName: c.name,
+      address: c.address ?? '',
+      country: c.country ?? '',
+      attention: c.contactPerson ?? '',
+      section: c.section ?? '',
+      phone: c.phone ?? '',
+      fax: c.fax ?? '',
+      email: c.email ?? ''
+    }}));
+  };
+
   if (!open) return null;
 
   return (
@@ -241,6 +285,11 @@ export const MemoModal: React.FC<Props> = ({ open, onClose, shipmentItems = [], 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="border rounded-md p-3 bg-white">
                 <div className="text-sm font-medium mb-2">Order By (Sold To)</div>
+                <select className="input w-full mb-2" value={memo.orderBy?.id ?? ''} onChange={(e) => onSelectCompany('orderBy', e.target.value)}>
+                  <option value="">-- Pilih perusahaan (atau pilih Manual) --</option>
+                  <option value="__manual__">Manual entry</option>
+                  {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
                 <Input label="Company Name" value={memo.orderBy?.companyName ?? ''} onChange={(e) => updatePartyField('orderBy', 'companyName', e.target.value)} />
                 <Input label="Address" value={memo.orderBy?.address ?? ''} onChange={(e) => updatePartyField('orderBy', 'address', e.target.value)} />
                 <Input label="Country" value={memo.orderBy?.country ?? ''} onChange={(e) => updatePartyField('orderBy', 'country', e.target.value)} />
@@ -253,6 +302,11 @@ export const MemoModal: React.FC<Props> = ({ open, onClose, shipmentItems = [], 
 
               <div className="border rounded-md p-3 bg-white">
                 <div className="text-sm font-medium mb-2">Delivery To</div>
+                <select className="input w-full mb-2" value={memo.deliveryTo?.id ?? ''} onChange={(e) => onSelectCompany('deliveryTo', e.target.value)}>
+                  <option value="">-- Pilih perusahaan (atau pilih Manual) --</option>
+                  <option value="__manual__">Manual entry</option>
+                  {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
                 <Input label="Company Name" value={memo.deliveryTo?.companyName ?? ''} onChange={(e) => updatePartyField('deliveryTo', 'companyName', e.target.value)} />
                 <Input label="Address" value={memo.deliveryTo?.address ?? ''} onChange={(e) => updatePartyField('deliveryTo', 'address', e.target.value)} />
                 <Input label="Country" value={memo.deliveryTo?.country ?? ''} onChange={(e) => updatePartyField('deliveryTo', 'country', e.target.value)} />

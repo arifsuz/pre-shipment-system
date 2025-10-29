@@ -101,27 +101,8 @@ export const ShipmentDetail: React.FC = () => {
               </Button>
             </Link>
           )}
-          
-          {/* Status Actions */}
-          {shipment.status === 'DRAFT' && (
-            <Button
-              variant="success"
-              onClick={() => handleStatusUpdate('IN_PROCESS')}
-            >
-              <Clock className="h-4 w-4 mr-2" />
-              Mark as In Process
-            </Button>
-          )}
-          
-          {shipment.status === 'IN_PROCESS' && (
-            <Button
-              variant="success"
-              onClick={() => handleStatusUpdate('APPROVED')}
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Approve
-            </Button>
-          )}
+
+          {/* status action buttons removed to disable Mark/Approve actions in UI */}
         </div>
       </div>
 

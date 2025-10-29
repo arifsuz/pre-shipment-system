@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { shipmentService } from '../../services/shipmentService';
-import type { Shipment } from '../../types';
+import { companyService } from '../../services/companyService';
+import type { Shipment, Company } from '../../types';
 
 type ManualItem = {
   no: number;
@@ -16,6 +17,7 @@ type ManualItem = {
 };
 
 type Party = {
+  id?: string;
   companyName?: string;
   address?: string;
   country?: string;
@@ -179,45 +181,258 @@ export const MemoPage: React.FC = () => {
 
   const isMatch = diffRows.length > 0 && diffRows.every(r => r.shipmentQty === r.memoQty);
 
-  const saveMemo = async (statusAfterSave: 'APPROVED' | 'IN_PROCESS') => {
-    if (!id) return alert('Shipment id missing');
-    if (!checked) return alert('Silakan Check Data terlebih dahulu');
-    setSaving(true);
+  // NEW: detect whether any memo input exists (so Draft button can be enabled even if unchecked)
+  const hasAnyMemoInput = useMemo(() => {
+    const partyHasValue = (p: Party) => !!p && Object.values(p).some(v => v !== undefined && v !== null && String(v).trim() !== '');
+    return !!(
+      memoNo ||
+      goodsType ||
+      dangerLevel ||
+      specialPermit ||
+      destination ||
+      invoiceType ||
+      sapInfo ||
+      tpNo ||
+      tpDate ||
+      packingDetails ||
+      portOfDischarge ||
+      shipmentMethod ||
+      paymentMethod ||
+      exportType ||
+      etdShipment ||
+      detailBarang ||
+      manualItems.length > 0 ||
+      partyHasValue(orderBy) ||
+      partyHasValue(deliveryTo)
+    );
+  }, [memoNo, goodsType, dangerLevel, specialPermit, destination, invoiceType, sapInfo, tpNo, tpDate, packingDetails, portOfDischarge, shipmentMethod, paymentMethod, exportType, etdShipment, detailBarang, manualItems, orderBy, deliveryTo]);
+
+  // NEW: derive current action based on whether admin has checked and whether items match
+  const currentAction = useMemo<'DRAFT' | 'IN_PROCESS' | 'APPROVED' | null>(() => {
+    if (!hasAnyMemoInput) return null;
+    if (!checked) return 'DRAFT';
+    return isMatch ? 'APPROVED' : 'IN_PROCESS';
+  }, [hasAnyMemoInput, checked, isMatch]);
+
+  // UPDATED: saveMemo now handles DRAFT / IN_PROCESS / APPROVED semantics
+  const saveMemo = async (statusAfterSave: 'DRAFT' | 'IN_PROCESS' | 'APPROVED') => {
+    if (!id) return;
     try {
-      const payload: any = {
-        memoNo,
-        goodsType,
-        dangerLevel,
-        specialPermit,
-        destination,
-        invoiceType,
-        sapInfo,
-        tpNo,
-        tpDate: toISOForServer(tpDate),
-        packingDetails,
-        portOfDischarge,
-        shipmentMethod,
-        paymentMethod,
-        exportType,
-        etdShipment: toISOForServer(etdShipment),
-        orderBy,
-        deliveryTo,
-        memoGoodsInfo: detailBarang,
-        manualItems // backend may persist
-      };
-      await shipmentService.updateShipmentMemo(id, payload);
-      await shipmentService.updateShipmentStatus(id, statusAfterSave);
-      alert(statusAfterSave === 'APPROVED' ? 'Memo saved and shipment approved' : 'Memo saved as in-process');
-      navigate('/shipments');
+      setSaving(true);
+      const payload = buildMemoPayload();
+
+      if (statusAfterSave === 'APPROVED') {
+        // publish memo and set shipment status to APPROVED
+        await shipmentService.publishMemo(id, {
+          ...payload,
+          setShipmentStatus: 'APPROVED'
+        });
+        alert('Memo saved and shipment approved');
+        // redirect to Data Shipment page
+        navigate('/shipments');
+      } else if (statusAfterSave === 'IN_PROCESS') {
+        // save draft and set shipment status to IN_PROCESS
+        await shipmentService.updateShipmentMemo(id, payload);
+        await shipmentService.updateShipmentStatus(id, 'IN_PROCESS');
+        alert('Memo saved as In Process');
+        // redirect to Data Shipment page
+        navigate('/shipments');
+      } else {
+        // DRAFT: save draft but keep shipment.status as DRAFT (do NOT change status)
+        await shipmentService.updateShipmentMemo(id, payload);
+        alert('Memo saved as Draft');
+        // redirect to Data Shipment page
+        navigate('/shipments');
+      }
     } catch (err) {
-      console.error(err);
-      // show server response if present
       const msg = (err as any)?.response?.data?.message || (err as any)?.message || 'Gagal menyimpan memo';
       alert(msg);
     } finally {
       setSaving(false);
     }
   };
+
+  // autosave helpers
+  const autosaveTimer = useRef<number | null>(null);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [lastAutoSavedAt, setLastAutoSavedAt] = useState<string | null>(null);
+
+  // load existing memo draft (if any)
+  useEffect(() => {
+    let mounted = true;
+    if (!id) return;
+    (async () => {
+      try {
+        const res: any = await shipmentService.getShipmentMemo(id);
+        if (!mounted || !res) return;
+        // backend returns { success: true, data: memo }
+        const memo = res.data ?? res;
+        if (!memo) return;
+
+        if (memo.memoNo) setMemoNo(memo.memoNo);
+        if (memo.goodsType) setGoodsType(memo.goodsType);
+        if (memo.dangerLevel) setDangerLevel(memo.dangerLevel);
+        if (memo.specialPermit !== undefined) setSpecialPermit(Boolean(memo.specialPermit));
+        if (memo.destination) setDestination(memo.destination);
+        if (memo.invoiceType) setInvoiceType(memo.invoiceType);
+        if (memo.sapInfo) setSapInfo(memo.sapInfo);
+        if (memo.tpNo !== undefined) setTpNo(memo.tpNo);
+        if (memo.tpDate) setTpDate(toDateInput(memo.tpDate) || null);
+        if (memo.packingDetails) setPackingDetails(memo.packingDetails);
+        if (memo.portOfDischarge) setPortOfDischarge(memo.portOfDischarge);
+        if (memo.shipmentMethod) setShipmentMethod(memo.shipmentMethod);
+        if (memo.paymentMethod) setPaymentMethod(memo.paymentMethod);
+        if (memo.exportType) setExportType(memo.exportType);
+        if (memo.etdShipment) setEtdShipment(toDateInput(memo.etdShipment) || null);
+
+        if (memo.orderBy) setOrderBy(memo.orderBy);
+        if (memo.deliveryTo) setDeliveryTo(memo.deliveryTo);
+
+        // manualItems stored in memo.manualItems (structured) or memoGoodsInfo (fallback JSON)
+        if (Array.isArray(memo.manualItems) && memo.manualItems.length) {
+          setManualItems(memo.manualItems.map((it: any, i: number) => ({
+            no: it.no ?? i + 1,
+            partNo: it.partNo ?? '',
+            partName: it.partName ?? '',
+            qty: Number(it.qty ?? it.quantity ?? 0),
+            pricePerPc: it.pricePerPc ?? undefined,
+            totalAmount: it.totalAmount ?? undefined,
+            specialPacking: it.specialPacking ?? undefined
+          })));
+        } else if (memo.memoGoodsInfo) {
+          try {
+            const parsed = JSON.parse(memo.memoGoodsInfo);
+            if (Array.isArray(parsed)) {
+              setManualItems(parsed.map((it: any, i: number) => ({
+                no: it.no ?? i + 1,
+                partNo: it.partNo ?? '',
+                partName: it.partName ?? '',
+                qty: Number(it.qty ?? it.quantity ?? 0),
+                pricePerPc: it.pricePerPc ?? undefined,
+                totalAmount: it.totalAmount ?? undefined,
+                specialPacking: it.specialPacking ?? undefined
+              })));
+              setDetailBarang('');
+            } else {
+              setDetailBarang(String(memo.memoGoodsInfo));
+            }
+          } catch {
+            setDetailBarang(String(memo.memoGoodsInfo));
+          }
+        }
+      } catch (err) {
+        // silent
+      }
+    })();
+    return () => { mounted = false; };
+  }, [id]);
+
+  // build memo payload helper
+  const buildMemoPayload = useCallback(() => ({
+    memoNo,
+    goodsType,
+    dangerLevel,
+    specialPermit,
+    destination,
+    invoiceType,
+    sapInfo,
+    tpNo,
+    tpDate: toISOForServer(tpDate),
+    packingDetails,
+    portOfDischarge,
+    shipmentMethod,
+    paymentMethod,
+    exportType,
+    etdShipment: toISOForServer(etdShipment),
+    orderBy,
+    deliveryTo,
+    memoGoodsInfo: detailBarang,
+    manualItems
+  }), [memoNo, goodsType, dangerLevel, specialPermit, destination, invoiceType, sapInfo, tpNo, tpDate, packingDetails, portOfDischarge, shipmentMethod, paymentMethod, exportType, etdShipment, orderBy, deliveryTo, detailBarang, manualItems]);
+
+  // autosave debounce
+  useEffect(() => {
+    if (!id) return;
+    if (autosaveTimer.current) {
+      clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = null;
+    }
+    autosaveTimer.current = window.setTimeout(async () => {
+      setIsAutoSaving(true);
+      try {
+        const payload = buildMemoPayload();
+        await shipmentService.updateShipmentMemo(id, payload);
+        setLastAutoSavedAt(new Date().toISOString());
+      } catch (err) {
+        console.error('Autosave memo failed', err);
+      } finally {
+        setIsAutoSaving(false);
+      }
+    }, 1200);
+
+    return () => {
+      if (autosaveTimer.current) {
+        clearTimeout(autosaveTimer.current);
+        autosaveTimer.current = null;
+      }
+    };
+  }, [id, buildMemoPayload]);
+
+  // flush on unload/unmount using keepalive fetch
+  const flushAutosave = useCallback(async () => {
+    if (!id) return;
+    try {
+      const payload = buildMemoPayload();
+      await fetch(`/api/shipments/${id}/memo`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true
+      });
+    } catch (err) {
+      // ignore
+    }
+  }, [id, buildMemoPayload]);
+
+  useEffect(() => {
+    return () => { flushAutosave(); };
+  }, [flushAutosave]);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      flushAutosave();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [flushAutosave]);
+
+  // handle Cancel -> delete memo draft then navigate back
+  const handleCancel = async () => {
+    if (!id) return navigate('/shipments');
+    try {
+      await shipmentService.deleteShipmentMemo(id);
+    } catch (err) {
+      // ignore delete errors
+    } finally {
+      navigate(`/shipments/${id}`);
+    }
+  };
+
+  // load company list
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const list = await companyService.getAll();
+        if (mounted) setCompanies(list);
+      } catch (err) {
+        // ignore
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const [companies, setCompanies] = useState<Company[]>([]);
 
   return (
     <div className="p-6">
@@ -227,7 +442,7 @@ export const MemoPage: React.FC = () => {
           <p className="text-sm text-gray-500">Shipment: {shipment?.orderNo ?? id}</p>
         </div>
         <div>
-          <Button variant="secondary" onClick={() => navigate('/shipments')}>Back</Button>
+          <Button variant="secondary" onClick={() => { flushAutosave(); navigate('/shipments'); }}>Back</Button>
         </div>
       </div>
 
@@ -288,26 +503,89 @@ export const MemoPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="border p-3 rounded">
             <div className="font-medium mb-2">Order By (Sold To)</div>
-            <Input label="Company Name" value={orderBy.companyName ?? ''} onChange={(e) => setOrderBy({...orderBy, companyName: e.target.value})} />
-            <Input label="Address" value={orderBy.address ?? ''} onChange={(e) => setOrderBy({...orderBy, address: e.target.value})} />
-            <Input label="Country" value={orderBy.country ?? ''} onChange={(e) => setOrderBy({...orderBy, country: e.target.value})} />
-            <Input label="Attention" value={orderBy.attention ?? ''} onChange={(e) => setOrderBy({...orderBy, attention: e.target.value})} />
-            <Input label="Section" value={orderBy.section ?? ''} onChange={(e) => setOrderBy({...orderBy, section: e.target.value})} />
-            <Input label="Phone" value={orderBy.phone ?? ''} onChange={(e) => setOrderBy({...orderBy, phone: e.target.value})} />
-            <Input label="Fax" value={orderBy.fax ?? ''} onChange={(e) => setOrderBy({...orderBy, fax: e.target.value})} />
-            <Input label="Email" value={orderBy.email ?? ''} onChange={(e) => setOrderBy({...orderBy, email: e.target.value})} />
+            <select
+              className="input w-full mb-2"
+              value={orderBy.id ?? ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (!val) return setOrderBy({});
+                if (val === '__manual__') return setOrderBy({});
+                const c = companies.find(x => String(x.id) === val);
+                if (c) {
+                  // normalize company object into Party
+                  setOrderBy({
+                    id: String((c as any).id ?? (c as any)._id ?? ''),
+                    companyName: (c as any).companyName ?? (c as any).name ?? (c as any).company ?? '',
+                    address: (c as any).address ?? '',
+                    country: (c as any).country ?? '',
+                    attention: (c as any).attention ?? '',
+                    section: (c as any).section ?? '',
+                    phone: (c as any).phone ?? (c as any).telephone ?? '',
+                    fax: (c as any).fax ?? '',
+                    email: (c as any).email ?? ''
+                  });
+                }
+              }}
+            >
+              <option value="">-- pilih company / manual --</option>
+              {companies.map(c => (
+                <option key={String((c as any).id ?? '')} value={String((c as any).id ?? '')}>
+                  {((c as any).companyName ?? (c as any).name ?? (c as any).company) || String((c as any).id)}
+                </option>
+              ))}
+              <option value="__manual__">-- Manual input --</option>
+            </select>
+            <Input label="Company Name" value={orderBy.companyName ?? ''} onChange={(e) => setOrderBy({...orderBy, id: undefined, companyName: e.target.value})} />
+            <Input label="Address" value={orderBy.address ?? ''} onChange={(e) => setOrderBy({...orderBy, id: undefined, address: e.target.value})} />
+            <Input label="Country" value={orderBy.country ?? ''} onChange={(e) => setOrderBy({...orderBy, id: undefined, country: e.target.value})} />
+            <Input label="Attention" value={orderBy.attention ?? ''} onChange={(e) => setOrderBy({...orderBy, id: undefined, attention: e.target.value})} />
+            <Input label="Section" value={orderBy.section ?? ''} onChange={(e) => setOrderBy({...orderBy, id: undefined, section: e.target.value})} />
+            <Input label="Phone" value={orderBy.phone ?? ''} onChange={(e) => setOrderBy({...orderBy, id: undefined, phone: e.target.value})} />
+            <Input label="Fax" value={orderBy.fax ?? ''} onChange={(e) => setOrderBy({...orderBy, id: undefined, fax: e.target.value})} />
+            <Input label="Email" value={orderBy.email ?? ''} onChange={(e) => setOrderBy({...orderBy, id: undefined, email: e.target.value})} />
           </div>
 
           <div className="border p-3 rounded">
             <div className="font-medium mb-2">Delivery To</div>
-            <Input label="Company Name" value={deliveryTo.companyName ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, companyName: e.target.value})} />
-            <Input label="Address" value={deliveryTo.address ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, address: e.target.value})} />
-            <Input label="Country" value={deliveryTo.country ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, country: e.target.value})} />
-            <Input label="Attention" value={deliveryTo.attention ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, attention: e.target.value})} />
-            <Input label="Section" value={deliveryTo.section ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, section: e.target.value})} />
-            <Input label="Phone" value={deliveryTo.phone ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, phone: e.target.value})} />
-            <Input label="Fax" value={deliveryTo.fax ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, fax: e.target.value})} />
-            <Input label="Email" value={deliveryTo.email ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, email: e.target.value})} />
+            <select
+              className="input w-full mb-2"
+              value={deliveryTo.id ?? ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (!val) return setDeliveryTo({});
+                if (val === '__manual__') return setDeliveryTo({});
+                const c = companies.find(x => String(x.id) === val);
+                if (c) {
+                  setDeliveryTo({
+                    id: String((c as any).id ?? (c as any)._id ?? ''),
+                    companyName: (c as any).companyName ?? (c as any).name ?? '',
+                    address: (c as any).address ?? '',
+                    country: (c as any).country ?? '',
+                    attention: (c as any).attention ?? '',
+                    section: (c as any).section ?? '',
+                    phone: (c as any).phone ?? '',
+                    fax: (c as any).fax ?? '',
+                    email: (c as any).email ?? ''
+                  });
+                }
+              }}
+            >
+              <option value="">-- pilih company / manual --</option>
+              {companies.map(c => (
+                <option key={String((c as any).id ?? '')} value={String((c as any).id ?? '')}>
+                  {((c as any).companyName ?? (c as any).name ?? (c as any).company) || String((c as any).id)}
+                </option>
+              ))}
+              <option value="__manual__">-- Manual input --</option>
+            </select>
+            <Input label="Company Name" value={deliveryTo.companyName ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, id: undefined, companyName: e.target.value})} />
+            <Input label="Address" value={deliveryTo.address ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, id: undefined, address: e.target.value})} />
+            <Input label="Country" value={deliveryTo.country ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, id: undefined, country: e.target.value})} />
+            <Input label="Attention" value={deliveryTo.attention ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, id: undefined, attention: e.target.value})} />
+            <Input label="Section" value={deliveryTo.section ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, id: undefined, section: e.target.value})} />
+            <Input label="Phone" value={deliveryTo.phone ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, id: undefined, phone: e.target.value})} />
+            <Input label="Fax" value={deliveryTo.fax ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, id: undefined, fax: e.target.value})} />
+            <Input label="Email" value={deliveryTo.email ?? ''} onChange={(e) => setDeliveryTo({...deliveryTo, id: undefined, email: e.target.value})} />
           </div>
         </div>
 
@@ -408,9 +686,16 @@ export const MemoPage: React.FC = () => {
         </div>
 
         <div className="flex justify-end gap-3 border-t pt-4">
-          <Button variant="secondary" onClick={() => navigate(`/shipments/${id}`)}>Cancel</Button>
-          <Button disabled={!checked} onClick={() => saveMemo(isMatch ? 'APPROVED' : 'IN_PROCESS') } loading={saving}>
-            {isMatch ? 'Save Memo & Approve' : 'Simpan Draft Memo (In Process)'}
+          <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
+
+          <Button
+            disabled={!currentAction}
+            onClick={() => currentAction && saveMemo(currentAction)}
+            loading={saving}
+          >
+            {currentAction === 'APPROVED' ? 'Save Memo & Approve' :
+             currentAction === 'IN_PROCESS' ? 'Simpan Draft Memo (In Process)' :
+             'Simpan Draft Memo (Draft)'}
           </Button>
         </div>
       </div>

@@ -79,5 +79,23 @@ export const shipmentService = {
     return data;
   },
 
+  // publish memo -> calls backend POST /shipments/:id/memo/publish
+  async publishMemo(id: string, payload: any) {
+    const { data } = await api.post(`/shipments/${id}/memo/publish`, payload);
+    return data;
+  },
+
+  // get memo draft/published for a shipment
+  async getShipmentMemo(id: string) {
+    const { data } = await api.get(`/shipments/${id}/memo`);
+    return data;
+  },
+
+  // delete memo draft (used when user cancels)
+  async deleteShipmentMemo(id: string) {
+    const { data } = await api.delete(`/shipments/${id}/memo`);
+    return data;
+  },
+
   getMemos,
 };
