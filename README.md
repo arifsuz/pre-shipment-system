@@ -56,6 +56,87 @@ Arsitektur backend menggunakan pola **MVC (Model-View-Controller)** dengan servi
 
 Frontend menggunakan arsitektur komponen modular, dengan hooks untuk state management dan services untuk API calls, memastikan kode yang reusable dan maintainable.
 
+### 📁 Struktur Proyek dan File Utama
+
+Berikut adalah struktur folder utama proyek PSE, beserta penjelasan fungsi file-file kunci untuk memudahkan navigasi dan pemahaman kode:
+
+#### Root Folder
+- **`README.md`**: Dokumentasi proyek ini, berisi panduan setup, penggunaan, dan informasi teknis.
+- **`package.json`**: File konfigurasi root untuk menjalankan script setup dan development secara bersamaan (menggunakan concurrently).
+- **`.env.example`**: Template untuk environment variables (salin ke `.env` dan isi kredensial).
+
+#### Backend (`/backend`)
+- **`src/app.ts`**: Entry point aplikasi backend, konfigurasi Express server, middleware (CORS, security), dan routing utama.
+- **`src/controllers/`**: 
+  - `authController.ts`: Menangani login, logout, dan autentikasi pengguna.
+  - `companyController.ts`: CRUD untuk manajemen perusahaan (companies).
+  - `notificationController.ts`: Mengelola notifikasi (create, read, mark as read).
+  - `shipmentController.ts`: Operasi CRUD untuk shipments, termasuk status updates.
+  - `statsController.ts`: Mengambil statistik dashboard (total shipments, approved, dll.).
+  - `userController.ts`: CRUD untuk manajemen pengguna (users).
+- **`src/middleware/`**: 
+  - `auth.ts`: Middleware autentikasi JWT untuk melindungi routes.
+  - `errorHandler.ts`: Penanganan error global.
+  - `notFound.ts`: Handler untuk routes yang tidak ditemukan.
+- **`src/routes/`**: Definisi API endpoints:
+  - `auth.ts`: Routes autentikasi (/login, /me).
+  - `companies.ts`: Routes perusahaan (/companies).
+  - `notifications.ts`: Routes notifikasi (/notifications).
+  - `shipments.ts`: Routes shipments (/shipments).
+  - `stats.ts`: Routes statistik (/stats).
+  - `upload.ts`: Routes upload Excel (/upload), termasuk test endpoint.
+  - `users.ts`: Routes pengguna (/users).
+- **`src/services/`**: Logika bisnis:
+  - `authService.ts`: Logika autentikasi (hash password, JWT).
+  - `companyService.ts`: Operasi database untuk companies.
+  - `excelService.ts`: Parsing dan validasi file Excel.
+  - `notificationService.ts`: Pengelolaan notifikasi.
+  - `shipmentService.ts`: Operasi shipments dan memo.
+  - `statsService.ts`: Query statistik.
+  - `userService.ts`: Operasi users.
+- **`src/utils/`**: 
+  - `database.ts`: Koneksi Prisma ke MySQL.
+  - `validation.ts`: Schema Zod untuk validasi input.
+- **`src/types/index.ts`**: Definisi TypeScript interfaces (User, Company, Shipment, dll.).
+- **`src/scripts/createAdmin.ts`**: Script untuk membuat user admin awal.
+- **`prisma/schema.prisma`**: Schema database Prisma (models, relations).
+- **`package.json`**: Dependencies backend (Express, Prisma, Zod, dll.).
+
+#### Frontend (`/frontend`)
+- **`src/App.tsx`**: Komponen root React, routing utama dengan React Router.
+- **`src/main.tsx`**: Entry point frontend, render App ke DOM.
+- **`src/index.css`**: Styling global dengan Tailwind CSS dan custom design tokens.
+- **`src/contexts/AuthContext.tsx`**: Context untuk state autentikasi global.
+- **`src/hooks/useLocalStorage.ts`**: Hook custom untuk persistensi data di localStorage.
+- **`src/pages/`**: Halaman utama aplikasi:
+  - `Dashboard.tsx`: Halaman dashboard dengan statistik dan filter.
+  - `Login.tsx`: Halaman login.
+  - `companies/`: Halaman CRUD companies (CompaniesList.tsx, CompanyForm.tsx).
+  - `shipments/`: Halaman shipments (ShipmenList.tsx, ShipmenForm.tsx, ShipmentDetail.tsx, MemoPage.tsx, dll.).
+  - `users/`: Halaman CRUD users (UsersList.tsx, UserForm.tsx).
+- **`src/components/`**: Komponen UI reusable:
+  - `layout/`: Header.tsx (navbar dengan notifikasi), Layout.tsx (wrapper), Sidebar.tsx (navigasi).
+  - `memo/`: MemoModal.tsx (modal untuk membuat memo komersial).
+  - `ui/`: Button.tsx, Input.tsx (komponen dasar UI).
+  - `upload/`: ExcelUpload.tsx (komponen upload dan preview Excel).
+- **`src/services/`**: API calls:
+  - `api.ts`: Instance Axios dengan interceptors.
+  - `authService.ts`: Service autentikasi.
+  - `companyService.ts`: Service companies.
+  - `notificationService.ts`: Service notifikasi.
+  - `shipmentService.ts`: Service shipments.
+  - `statsService.ts`: Service statistik.
+  - `userService.ts`: Service users.
+- **`src/types/index.ts`**: Definisi TypeScript interfaces (mirip backend).
+- **`src/utils/`**: Utility functions (jika ada).
+- **`public/`**: Static assets (favicon, dll.).
+- **`index.html`**: Template HTML utama.
+- **`vite.config.ts`**: Konfigurasi Vite build tool.
+- **`eslint.config.js`**: Konfigurasi ESLint untuk linting kode.
+- **`package.json`**: Dependencies frontend (React, Vite, Tailwind, dll.).
+
+Struktur ini memisahkan concerns dengan jelas: backend fokus pada API dan logika server, frontend pada UI dan interaksi user. File-file ini saling terintegrasi untuk membentuk aplikasi full-stack yang robust.
+
 ---
 
 ### ⚙️ Setup dan Instalasi
@@ -124,6 +205,19 @@ npm install
 - Jika ada error database, pastikan MySQL running dan kredensial benar.
 - Untuk production, gunakan `npm run build` di kedua folder, lalu deploy dengan PM2 atau Docker.
 - Jika port konflik, ubah PORT di `.env`.
+
+---
+
+### 🚀 Setup Mudah untuk Non-Developer (Windows)
+
+Untuk menjalankan proyek ini di komputer lokal tanpa perlu coding:
+
+1. Pastikan Node.js (v18+) dan MySQL terinstall dan running.
+2. Double-click file `setup-and-run.bat` di root folder proyek.
+3. Ikuti prompt untuk edit file `.env` (gunakan editor teks seperti Notepad).
+4. Tunggu setup selesai – aplikasi akan otomatis berjalan di browser.
+
+Jika ada error, periksa pesan di command prompt dan pastikan kredensial database benar.
 
 ---
 
