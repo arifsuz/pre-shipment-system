@@ -7,7 +7,7 @@ import { loadEnv } from 'vite'
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd())
-  const apiBase = env.VITE_API_URL ?? env.API_BASE_URL
+  const apiBase = env.VITE_API_URL
 
   return {
     plugins: [react(), tailwindcss()],
