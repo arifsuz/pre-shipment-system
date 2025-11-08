@@ -33,6 +33,7 @@ router.get('/:id/memo', authenticate, withController((ctrl, req, res) => ctrl.ge
 router.put('/:id/memo', authenticate, withController((ctrl, req, res) => ctrl.upsertMemo(req, res)));
 router.delete('/:id/memo', authenticate, withController((ctrl, req, res) => ctrl.deleteMemo(req, res)));
 router.post('/:id/memo/publish', authenticate, withController((ctrl, req, res) => ctrl.publishMemo(req, res)));
+router.post('/:id/memo/save', authenticate, withController((ctrl, req, res) => ctrl.saveMemoFinal(req, res)));
 
 export default router;
 

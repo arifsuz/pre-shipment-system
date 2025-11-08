@@ -153,13 +153,12 @@ export class ShipmentService {
     shipmentId: string,
     updateData: Partial<Shipment> & {
       items?: Omit<ShipmentItem, 'id' | 'createdAt' | 'updatedAt' | 'shipmentId'>[];
-      manualItems?: any[]; // allow memo frontend payload
+      manualItems?: any[];
       orderBy?: any;
       deliveryTo?: any;
     }
   ): Promise<ApiResponse> {
     try {
-      // Check if shipment exists and is not approved
       const existingShipment = await prisma.shipment.findUnique({
         where: { id: shipmentId }
       });
@@ -172,10 +171,8 @@ export class ShipmentService {
         return { success: false, message: 'Cannot modify approved shipment' };
       }
 
-      // Destructure helper fields that need special handling
       const { items, manualItems, orderBy, deliveryTo, productionMonth, tpDate, etdShipment, ...rest } = updateData as any;
 
-      // List of allowed scalar fields in Shipment model
       const allowedScalars = [
         'shippingMark','orderNo','caseNo','destination','model','productionMonth','caseSize',
         'grossWeight','netWeight','rackNo','status','memoNo','goodsType','shipmentType',
@@ -186,13 +183,11 @@ export class ShipmentService {
 
       const updatePayload: any = {};
 
-      // copy allowed scalar fields (and convert dates)
       for (const k of allowedScalars) {
         if (rest[k] !== undefined) {
           if (k === 'productionMonth' && rest[k]) {
             updatePayload.productionMonth = new Date(rest[k]);
           } else if ((k === 'tpDate' || k === 'etdShipment') && rest[k] != null) {
-            // accept null to unset
             updatePayload[k] = rest[k] ? new Date(rest[k]) : null;
           } else {
             updatePayload[k] = rest[k];
@@ -202,35 +197,47 @@ export class ShipmentService {
 
       // HANDLE orderBy: create or connect
       if (orderBy) {
-        const { id: obId, companyName, address, phone, email, attention } = orderBy;
+        const { id: obId, companyName, address, phone, email, attention, country, section, fax } = orderBy;
         if (obId) {
+          // Connect to existing company
           updatePayload.orderBy = { connect: { id: obId } };
-        } else {
+        } else if (companyName) {
+          // Create new company with ALL fields
           updatePayload.orderBy = {
             create: {
-              name: companyName || 'Unknown',
-              address: address || undefined,
-              phone: phone || undefined,
-              email: email || undefined,
-              contactPerson: attention || undefined
+              name: companyName,
+              address: address || null,
+              phone: phone || null,
+              fax: fax || null,
+              email: email || null,
+              contactPerson: attention || null,
+              country: country || null,
+              section: section || null,
+              isActive: true
             }
           };
         }
       }
 
-      // HANDLE deliveryTo -> deliverTo relation
+      // HANDLE deliveryTo: create or connect
       if (deliveryTo) {
-        const { id: dtId, companyName, address, phone, email, attention } = deliveryTo;
+        const { id: dtId, companyName, address, phone, email, attention, country, section, fax } = deliveryTo;
         if (dtId) {
+          // Connect to existing company
           updatePayload.deliverTo = { connect: { id: dtId } };
-        } else {
+        } else if (companyName) {
+          // Create new company with ALL fields
           updatePayload.deliverTo = {
             create: {
-              name: companyName || 'Unknown',
-              address: address || undefined,
-              phone: phone || undefined,
-              email: email || undefined,
-              contactPerson: attention || undefined
+              name: companyName,
+              address: address || null,
+              phone: phone || null,
+              fax: fax || null,
+              email: email || null,
+              contactPerson: attention || null,
+              country: country || null,
+              section: section || null,
+              isActive: true
             }
           };
         }
@@ -253,7 +260,6 @@ export class ShipmentService {
           }))
         };
       } else if (items) {
-        // existing items update behaviour (if frontend passes items)
         updatePayload.items = {
           deleteMany: {},
           create: items.map((it: any) => ({
@@ -271,7 +277,9 @@ export class ShipmentService {
         where: { id: shipmentId },
         data: updatePayload,
         include: {
-          items: true
+          items: true,
+          orderBy: true,
+          deliverTo: true
         }
       });
 
@@ -382,26 +390,35 @@ export class ShipmentService {
 
   async upsertMemoDraft(shipmentId: string, payload: any) {
     try {
+      // DON'T create companies here - just save memo draft with raw party data
+      const { orderBy, deliveryTo, ...memoData } = payload;
+
+      // Store party data as-is in memo (don't create companies yet)
       const data: any = {
         shipmentId,
-        memoNo: payload.memoNo ?? null,
-        goodsType: payload.goodsType ?? null,
-        shipmentType: payload.shipmentType ?? null,
-        dangerLevel: payload.dangerLevel ?? null,
-        specialPermit: payload.specialPermit ?? false,
-        invoiceType: payload.invoiceType ?? null,
-        purpose: payload.purpose ?? null,
-        sapInfo: payload.sapInfo ?? null,
-        tpNo: payload.tpNo ?? null,
-        tpDate: payload.tpDate ?? null,
-        packingDetails: payload.packingDetails ?? null,
-        memoGoodsInfo: payload.memoGoodsInfo ?? null,
-        manualItems: payload.manualItems ?? null,
-        portOfDischarge: payload.portOfDischarge ?? null,
-        shipmentMethod: payload.shipmentMethod ?? null,
-        paymentMethod: payload.paymentMethod ?? null,
-        exportType: payload.exportType ?? null,
-        etdShipment: payload.etdShipment ?? null,
+        memoNo: memoData.memoNo ?? null,
+        goodsType: memoData.goodsType ?? null,
+        shipmentType: memoData.shipmentType ?? null,
+        dangerLevel: memoData.dangerLevel ?? null,
+        specialPermit: memoData.specialPermit ?? false,
+        invoiceType: memoData.invoiceType ?? null,
+        purpose: memoData.purpose ?? null,
+        sapInfo: memoData.sapInfo ?? null,
+        tpNo: memoData.tpNo ?? null,
+        tpDate: memoData.tpDate ?? null,
+        packingDetails: memoData.packingDetails ?? null,
+        memoGoodsInfo: memoData.memoGoodsInfo ?? null,
+        // Store party data as JSON (not creating companies yet)
+        manualItems: memoData.manualItems ? JSON.stringify({
+          items: memoData.manualItems,
+          orderBy: orderBy || null,
+          deliveryTo: deliveryTo || null
+        }) : null,
+        portOfDischarge: memoData.portOfDischarge ?? null,
+        shipmentMethod: memoData.shipmentMethod ?? null,
+        paymentMethod: memoData.paymentMethod ?? null,
+        exportType: memoData.exportType ?? null,
+        etdShipment: memoData.etdShipment ?? null,
         status: 'DRAFT'
       };
 
@@ -410,6 +427,7 @@ export class ShipmentService {
         update: data,
         create: data
       });
+
       return { success: true, data: memo };
     } catch (error) {
       console.error('upsertMemoDraft error', error);
@@ -430,21 +448,124 @@ export class ShipmentService {
   // publish: mark memo as published and (optionally) update shipment status
   async publishMemo(shipmentId: string, publishPayload: any) {
     try {
-      const memo = await prisma.memo.update({
+      const { orderBy, deliveryTo, ...memoData } = publishPayload;
+
+      // NOW create companies when user clicks "Save Memo"
+      const orderById = await ensureCompanyExists(orderBy);
+      const deliverToId = await ensureCompanyExists(deliveryTo);
+
+      // Prepare memo data
+      const data: any = {
+        shipmentId,
+        memoNo: memoData.memoNo ?? null,
+        goodsType: memoData.goodsType ?? null,
+        shipmentType: memoData.shipmentType ?? null,
+        dangerLevel: memoData.dangerLevel ?? null,
+        specialPermit: memoData.specialPermit ?? false,
+        invoiceType: memoData.invoiceType ?? null,
+        purpose: memoData.purpose ?? null,
+        sapInfo: memoData.sapInfo ?? null,
+        tpNo: memoData.tpNo ?? null,
+        tpDate: memoData.tpDate ?? null,
+        packingDetails: memoData.packingDetails ?? null,
+        memoGoodsInfo: memoData.memoGoodsInfo ?? null,
+        manualItems: memoData.manualItems ? JSON.stringify({
+          items: memoData.manualItems,
+          orderBy: orderBy || null,
+          deliveryTo: deliveryTo || null
+        }) : null,
+        portOfDischarge: memoData.portOfDischarge ?? null,
+        shipmentMethod: memoData.shipmentMethod ?? null,
+        paymentMethod: memoData.paymentMethod ?? null,
+        exportType: memoData.exportType ?? null,
+        etdShipment: memoData.etdShipment ?? null,
+        status: 'PUBLISHED'
+      };
+
+      const memo = await prisma.memo.upsert({
         where: { shipmentId },
-        data: { ...publishPayload, status: 'PUBLISHED' }
+        update: data,
+        create: data
       });
-      // optionally update shipment.status if desired:
-      if (publishPayload.setShipmentStatus) {
+
+      // Update shipment with company relations and status
+      const shipmentUpdate: any = {};
+      if (orderById) shipmentUpdate.orderById = orderById;
+      if (deliverToId) shipmentUpdate.deliverToId = deliverToId;
+      if (memoData.setShipmentStatus) shipmentUpdate.status = memoData.setShipmentStatus;
+
+      if (Object.keys(shipmentUpdate).length > 0) {
         await prisma.shipment.update({
           where: { id: shipmentId },
-          data: { status: publishPayload.setShipmentStatus }
+          data: shipmentUpdate
         });
       }
+
       return { success: true, data: memo };
     } catch (error) {
       console.error('publishMemo error', error);
       return { success: false, message: 'Error publishing memo' };
+    }
+  }
+
+  // NEW: finalSaveMemo - create companies and save memo (for Draft/In Process)
+  async finalSaveMemo(shipmentId: string, payload: any, statusAfterSave: 'DRAFT' | 'IN_PROCESS') {
+    try {
+      const { orderBy, deliveryTo, ...memoData } = payload;
+
+      // Create companies when user clicks "Save Memo"
+      const orderById = await ensureCompanyExists(orderBy);
+      const deliverToId = await ensureCompanyExists(deliveryTo);
+
+      // Save memo data
+      const data: any = {
+        shipmentId,
+        memoNo: memoData.memoNo ?? null,
+        goodsType: memoData.goodsType ?? null,
+        shipmentType: memoData.shipmentType ?? null,
+        dangerLevel: memoData.dangerLevel ?? null,
+        specialPermit: memoData.specialPermit ?? false,
+        invoiceType: memoData.invoiceType ?? null,
+        purpose: memoData.purpose ?? null,
+        sapInfo: memoData.sapInfo ?? null,
+        tpNo: memoData.tpNo ?? null,
+        tpDate: memoData.tpDate ?? null,
+        packingDetails: memoData.packingDetails ?? null,
+        memoGoodsInfo: memoData.memoGoodsInfo ?? null,
+        manualItems: memoData.manualItems ? JSON.stringify({
+          items: memoData.manualItems,
+          orderBy: orderBy || null,
+          deliveryTo: deliveryTo || null
+        }) : null,
+        portOfDischarge: memoData.portOfDischarge ?? null,
+        shipmentMethod: memoData.shipmentMethod ?? null,
+        paymentMethod: memoData.paymentMethod ?? null,
+        exportType: memoData.exportType ?? null,
+        etdShipment: memoData.etdShipment ?? null,
+        status: 'DRAFT' // memo status always draft initially
+      };
+
+      const memo = await prisma.memo.upsert({
+        where: { shipmentId },
+        update: data,
+        create: data
+      });
+
+      // Update shipment with company relations and status
+      const shipmentUpdate: any = {};
+      if (orderById) shipmentUpdate.orderById = orderById;
+      if (deliverToId) shipmentUpdate.deliverToId = deliverToId;
+      shipmentUpdate.status = statusAfterSave; // set shipment status
+
+      await prisma.shipment.update({
+        where: { id: shipmentId },
+        data: shipmentUpdate
+      });
+
+      return { success: true, data: memo };
+    } catch (error) {
+      console.error('finalSaveMemo error', error);
+      return { success: false, message: 'Error saving memo' };
     }
   }
 }
@@ -477,4 +598,32 @@ function mapCompanyForShipment(c: any) {
     email: c.email ?? c.emailAddress ?? c.contactEmail ?? (c.contactPerson && c.contactPerson.email) ?? null,
     ...c
   };
+}
+
+// Helper: create company if needed
+async function ensureCompanyExists(partyData: any): Promise<string | null> {
+  if (!partyData) return null;
+  
+  // If has ID, company already exists
+  if (partyData.id) return partyData.id;
+  
+  // If no company name, skip
+  if (!partyData.companyName) return null;
+  
+  // Create new company
+  const newCompany = await prisma.company.create({
+    data: {
+      name: partyData.companyName,
+      address: partyData.address || null,
+      phone: partyData.phone || null,
+      fax: partyData.fax || null,
+      email: partyData.email || null,
+      contactPerson: partyData.attention || null,
+      country: partyData.country || null,
+      section: partyData.section || null,
+      isActive: true
+    }
+  });
+  
+  return newCompany.id;
 }

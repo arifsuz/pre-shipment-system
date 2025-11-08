@@ -255,4 +255,23 @@ export class ShipmentController {
       return res.status(500).json({ success: false, message: 'Error publishing memo' });
     }
   }
+
+  // POST /shipments/:id/memo/save - final save memo (Draft/In Process) with company creation
+  async saveMemoFinal(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { statusAfterSave, ...payload } = req.body;
+      
+      if (!['DRAFT', 'IN_PROCESS'].includes(statusAfterSave)) {
+        return res.status(400).json({ success: false, message: 'Invalid status' });
+      }
+      
+      const result = await shipmentService.finalSaveMemo(id, payload, statusAfterSave);
+      if (!result.success) return res.status(400).json(result);
+      return res.json({ success: true, data: result.data });
+    } catch (error) {
+      console.error('ShipmentController.saveMemoFinal error:', error);
+      return res.status(500).json({ success: false, message: 'Error saving memo' });
+    }
+  }
 }

@@ -98,4 +98,13 @@ export const shipmentService = {
   },
 
   getMemos,
+
+  // NEW: final save memo (Draft/In Process) with company creation
+  async saveMemoFinal(id: string, payload: any, statusAfterSave: 'DRAFT' | 'IN_PROCESS') {
+    const { data } = await api.post(`/shipments/${id}/memo/save`, {
+      ...payload,
+      statusAfterSave,
+    });
+    return data;
+  },
 };

@@ -222,28 +222,17 @@ export const MemoPage: React.FC = () => {
       const payload = buildMemoPayload();
 
       if (statusAfterSave === 'APPROVED') {
-        // publish memo and set shipment status to APPROVED
         await shipmentService.publishMemo(id, {
           ...payload,
           setShipmentStatus: 'APPROVED'
         });
         alert('Memo saved and shipment approved');
-        // redirect to Data Shipment page
-        navigate('/shipments');
-      } else if (statusAfterSave === 'IN_PROCESS') {
-        // save draft and set shipment status to IN_PROCESS
-        await shipmentService.updateShipmentMemo(id, payload);
-        await shipmentService.updateShipmentStatus(id, 'IN_PROCESS');
-        alert('Memo saved as In Process');
-        // redirect to Data Shipment page
-        navigate('/shipments');
       } else {
-        // DRAFT: save draft but keep shipment.status as DRAFT (do NOT change status)
-        await shipmentService.updateShipmentMemo(id, payload);
-        alert('Memo saved as Draft');
-        // redirect to Data Shipment page
-        navigate('/shipments');
+        // Use new service method
+        await shipmentService.saveMemoFinal(id, payload, statusAfterSave);
+        alert(`Memo saved as ${statusAfterSave === 'DRAFT' ? 'Draft' : 'In Process'}`);
       }
+      navigate('/shipments');
     } catch (err) {
       const msg = (err as any)?.response?.data?.message || (err as any)?.message || 'Gagal menyimpan memo';
       alert(msg);
@@ -361,6 +350,7 @@ export const MemoPage: React.FC = () => {
       setIsAutoSaving(true);
       try {
         const payload = buildMemoPayload();
+        // autosave TIDAK create companies (hanya simpan data memo draft)
         await shipmentService.updateShipmentMemo(id, payload);
         setLastAutoSavedAt(new Date().toISOString());
       } catch (err) {
@@ -383,9 +373,13 @@ export const MemoPage: React.FC = () => {
     if (!id) return;
     try {
       const payload = buildMemoPayload();
-      await fetch(`/api/shipments/${id}/memo`, {
+      const API_BASE_URL = import.meta.env.VITE_API_URL as string;
+      await fetch(`${API_BASE_URL}/shipments/${id}/memo`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
         body: JSON.stringify(payload),
         keepalive: true
       });

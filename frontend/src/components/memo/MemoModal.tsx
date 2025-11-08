@@ -16,7 +16,7 @@ type ManualItem = {
 };
 
 type Party = {
-  id?: string; // added
+  id?: string;
   companyName?: string;
   address?: string;
   country?: string;
@@ -29,25 +29,25 @@ type Party = {
 
 type MemoData = {
   memoNo?: string;
-  goodsType?: string; // 1. Jenis barang yang di export
-  shipmentType?: string; // optional
-  dangerLevel?: string; // 2.
-  specialPermit?: boolean; // 3.
-  destination?: string; // 4.
-  invoiceType?: string; // 5.
+  goodsType?: string;
+  shipmentType?: string;
+  dangerLevel?: string;
+  specialPermit?: boolean;
+  destination?: string;
+  invoiceType?: string;
   sapInfo?: string;
-  tpNo?: string | null; // allow empty
-  tpDate?: string | null; // allow empty
-  packingDetails?: string; // 7. Detail Kemasan
-  portOfDischarge?: string; // 9
-  shipmentMethod?: string; // 10
-  paymentMethod?: string; // 11
-  exportType?: string; // 12
-  etdShipment?: string; // 13
+  tpNo?: string | null;
+  tpDate?: string | null;
+  packingDetails?: string;
+  portOfDischarge?: string;
+  shipmentMethod?: string;
+  paymentMethod?: string;
+  exportType?: string;
+  etdShipment?: string;
   orderBy?: Party;
   deliveryTo?: Party;
-  memoGoodsInfo?: string; // 6. Detail Barang (text)
-  manualItems: ManualItem[]; // items input manual (for memo)
+  memoGoodsInfo?: string;
+  manualItems: ManualItem[];
 };
 
 interface Props {
